@@ -34,6 +34,7 @@ func main() {
 	r.POST("/register", auth.Register)
 	r.POST("/login", auth.Login)
 	r.POST("/logout", handlers.AuthMiddleware(), controllers.Logout)
+	sc := controllers.SubscriptionController{DB: db}
 
 	protected := r.Group("/")
 	protected.Use(handlers.AuthMiddleware())
@@ -43,6 +44,7 @@ func main() {
 			c.JSON(200, gin.H{"message": "Welcome!", "user_id": userID})
 		})
 		protected.PATCH("/profile", controllers.UpdateProfile(db))
+		protected.PATCH("/subscribe", sc.UpdateUserSubscription)
 	}
 
 

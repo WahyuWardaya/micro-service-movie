@@ -1,9 +1,12 @@
 package controllers
 
 import (
+	"encoding/json"
 	"movie-service/models"
 	"net/http"
+	"os"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -208,8 +211,70 @@ func (mc *MovieController) GetMovieByID(c *gin.Context) {
 		"genres":           genreIDs(movie.Genres),
 		"actors":           actorIDs(movie.Actors),
 	})
-}
+	// inside GetMovieByID(...) after loading movie
+	if movie.IsPremium {
+		_, exists := c.Get("user_id")
+		if !exists {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "subscription_required",
+				"message": "This is premium content. Please subscribe.",
+			})
+			return
+		}
 
+		userServiceURL := os.Getenv("USER_SERVICE_URL")
+		req, _ := http.NewRequest("GET", userServiceURL+"/profile", nil)
+
+		auth := c.GetHeader("Authorization")
+		if auth == "" {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "subscription_required",
+				"message": "Please login & subscribe to access premium content.",
+			})
+			return
+		}
+
+		req.Header.Set("Authorization", auth)
+		client := &http.Client{Timeout: time.Second * 5}
+		resp, err := client.Do(req)
+		if err != nil || resp.StatusCode != 200 {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "subscription_required",
+				"message": "Cannot verify subscription",
+			})
+			return
+		}
+
+		var body map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&body)
+
+		if body["subscription_type"] == nil || body["subscription_type"] == "none" {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "subscription_required",
+				"message": "Please subscribe to access premium content.",
+			})
+			return
+		}
+
+		expiresStr, ok := body["subscription_expired_at"].(string)
+		if !ok || expiresStr == "" {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "subscription_required",
+				"message": "Please subscribe to access premium content.",
+			})
+			return
+		}
+
+		expiryTime, _ := time.Parse(time.RFC3339, expiresStr)
+		if time.Now().After(expiryTime) {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":   "subscription_expired",
+				"message": "Subscription expired, please renew.",
+			})
+			return
+		}
+	}
+}
 // UpdateMovie - PATCH /movies/:id (auth required)
 func (mc *MovieController) UpdateMovie(c *gin.Context) {
 	idParam := c.Param("id")
