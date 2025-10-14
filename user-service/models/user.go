@@ -9,4 +9,9 @@ type User struct {
 	PasswordHash string `gorm:"type:text" json:"-"`
 	SubscriptionType     string     `gorm:"type:varchar(50);default:'none'" json:"subscription_type"`
     SubscriptionExpiredAt *time.Time `json:"subscription_expired_at"`
+	Watchlist []Movie `gorm:"many2many:watchlists;" json:"-"`
+}
+
+type Movie struct {
+    ID uint `gorm:"primaryKey"`
 }

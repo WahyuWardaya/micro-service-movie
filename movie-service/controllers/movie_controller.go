@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -156,7 +157,18 @@ func (mc *MovieController) CreateMovie(c *gin.Context) {
 // GetMovies - GET /movies (public)
 func (mc *MovieController) GetMovies(c *gin.Context) {
 	var movies []models.Movie
-	if err := mc.DB.Preload("Genres").Preload("Actors").Find(&movies).Error; err != nil {
+	
+	// Membangun query dasar
+	query := mc.DB.Preload("Genres").Preload("Actors")
+
+	// Cek apakah ada parameter 'search'
+	searchQuery := c.Query("search")
+	if searchQuery != "" {
+		// Menambahkan kondisi WHERE untuk pencarian judul (case-insensitive)
+		query = query.Where("LOWER(title) LIKE ?", "%"+strings.ToLower(searchQuery)+"%")
+	}
+
+	if err := query.Find(&movies).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list movies"})
 		return
 	}
@@ -177,6 +189,33 @@ func (mc *MovieController) GetMovies(c *gin.Context) {
 		})
 	}
 	c.JSON(http.StatusOK, out)
+}
+
+// GetTrendingMovies - GET /movies/trending (public)
+func (mc *MovieController) GetTrendingMovies(c *gin.Context) {
+    var movies []models.Movie
+    // Mengambil 10 film, diurutkan berdasarkan rating dari tertinggi ke terendah
+    if err := mc.DB.Preload("Genres").Preload("Actors").Order("rating desc").Limit(10).Find(&movies).Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch trending movies"})
+        return
+    }
+
+    out := make([]gin.H, 0, len(movies))
+    for _, m := range movies {
+        out = append(out, gin.H{
+            "id":               m.ID,
+            "title":            m.Title,
+            "poster_base64":    m.PosterBase64,
+            "duration_minutes": m.DurationMinutes,
+            "synopsis":         m.Synopsis,
+            "release_year":     m.ReleaseYear,
+            "rating":           m.Rating,
+            "views":            m.Views,
+            "genres":           genreIDs(m.Genres),
+            "actors":           actorIDs(m.Actors),
+        })
+    }
+    c.JSON(http.StatusOK, out)
 }
 
 // GetMovieByID - GET /movies/:id (public)
@@ -274,6 +313,74 @@ func (mc *MovieController) GetMovieByID(c *gin.Context) {
 			return
 		}
 	}
+}
+
+func (mc *MovieController) GetMovieRecommendations(c *gin.Context) {
+    // 1. Dapatkan ID film utama dari parameter URL
+    idParam := c.Param("id")
+    id64, err := strconv.ParseUint(idParam, 10, 64)
+    if err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "invalid movie id"})
+        return
+    }
+    movieID := uint(id64)
+
+    // 2. Ambil data film utama beserta genrenya
+    var primaryMovie models.Movie
+    if err := mc.DB.Preload("Genres").First(&primaryMovie, movieID).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            c.JSON(http.StatusNotFound, gin.H{"error": "primary movie not found"})
+            return
+        }
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query primary movie"})
+        return
+    }
+
+    if len(primaryMovie.Genres) == 0 {
+        c.JSON(http.StatusOK, []gin.H{})
+        return
+    }
+
+    // 3. Ekstrak semua ID genre dari film utama
+    targetGenreIDs := make([]uint, len(primaryMovie.Genres))
+    for i, genre := range primaryMovie.Genres {
+        targetGenreIDs[i] = genre.ID
+    }
+
+    // 4. Cari 10 film lain yang memiliki salah satu dari genre tersebut
+    var recommendations []models.Movie
+    err = mc.DB.
+        Joins("JOIN movie_genres ON movies.id = movie_genres.movie_id").
+        Where("movie_genres.genre_id IN ?", targetGenreIDs).
+        Where("movies.id != ?", movieID).
+        Distinct().
+        Limit(10).
+        Preload("Genres").
+        Preload("Actors").
+        Find(&recommendations).Error
+
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch recommendations"})
+        return
+    }
+
+    // 5. Format outputnya
+    out := make([]gin.H, 0, len(recommendations))
+    for _, m := range recommendations {
+        out = append(out, gin.H{
+            "id":               m.ID,
+            "title":            m.Title,
+            "poster_base64":    m.PosterBase64,
+            "duration_minutes": m.DurationMinutes,
+            "synopsis":         m.Synopsis,
+            "release_year":     m.ReleaseYear,
+            "rating":           m.Rating,
+            "genres":           genreIDs(m.Genres), 
+            "actors":           actorIDs(m.Actors), 
+        })
+    }
+
+    c.JSON(http.StatusOK, out)
 }
 // UpdateMovie - PATCH /movies/:id (auth required)
 func (mc *MovieController) UpdateMovie(c *gin.Context) {

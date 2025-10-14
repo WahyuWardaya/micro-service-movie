@@ -24,7 +24,7 @@ type createSubReq struct {
 // price map (in smallest currency unit, e.g. cents or in rupiah)
 var priceMap = map[string]int64{
     "monthly": 45000,
-    "3months": 135000,
+    "3months": 125000,
     "yearly": 1620000,
 }
 
@@ -81,7 +81,7 @@ func (sc *SubscriptionController) CreateSubscription(c *gin.Context) {
 
     // forward the same Authorization header the client used
     authHeader := c.GetHeader("Authorization")
-    req2, _ := http.NewRequest("PATCH", userSvc+"/users/subscription", bytes.NewReader(b))
+    req2, _ := http.NewRequest("PATCH", userSvc+"/subscribe", bytes.NewReader(b))
     req2.Header.Set("Content-Type","application/json")
     if authHeader != "" {
         req2.Header.Set("Authorization", authHeader)

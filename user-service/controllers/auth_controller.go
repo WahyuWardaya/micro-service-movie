@@ -16,7 +16,7 @@ func Logout(c *gin.Context) {
 
 func UpdateProfile(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID := c.GetInt("user_id") // didapat dari middleware
+		userID := c.GetUint("user_id") // didapat dari middleware
 
 		var req struct {
 			Name  *string `json:"name"`

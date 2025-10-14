@@ -28,7 +28,7 @@ func Connect() *gorm.DB {
 	}
 
 	// Auto migrate user table
-	db.AutoMigrate(&models.User{})
+	db.AutoMigrate(&models.User{}, &models.Movie{}, &models.Watchlist{})
 
 	DB = db
 	return db

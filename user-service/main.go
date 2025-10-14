@@ -35,16 +35,20 @@ func main() {
 	r.POST("/login", auth.Login)
 	r.POST("/logout", handlers.AuthMiddleware(), controllers.Logout)
 	sc := controllers.SubscriptionController{DB: db}
+	wc := controllers.WatchlistController{DB: db}
 
 	protected := r.Group("/")
 	protected.Use(handlers.AuthMiddleware())
 	{
-		protected.GET("/profile", func(c *gin.Context) {
-			userID := c.GetUint("user_id")
-			c.JSON(200, gin.H{"message": "Welcome!", "user_id": userID})
-		})
+		protected.GET("/profile", controllers.GetProfile(db))
 		protected.PATCH("/profile", controllers.UpdateProfile(db))
 		protected.PATCH("/subscribe", sc.UpdateUserSubscription)
+
+		protected.PATCH("/profile/password", controllers.ChangePassword(db))
+
+		protected.POST("/profile/watchlist", wc.AddToWatchlist)
+		protected.GET("/profile/watchlist", wc.GetWatchlist)
+		protected.DELETE("/profile/watchlist/:movieId", wc.RemoveFromWatchlist)
 	}
 
 

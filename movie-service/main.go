@@ -16,24 +16,13 @@ import (
 func main() {
 	_ = godotenv.Load(".env")
 
+
 	db := connection.Connect()
 	mc := controllers.MovieController{DB: db}
 	gc := controllers.GenreController{DB: db}
 	ac := controllers.ActorController{DB: db}
 
 	r := gin.Default()
-
-	// Movie public
-	r.GET("/movies", mc.GetMovies)
-	r.GET("/movies/:id", mc.GetMovieByID)
-
-	// Genre public
-	r.GET("/genres", gc.ListGenres)
-	r.GET("/genres/:id", gc.GetGenre)
-
-	// Actor public
-	r.GET("/actors", ac.ListActors)
-	r.GET("/actors/:id", ac.GetActor)
 
 	// CORS
 	r.Use(cors.New(cors.Config{
@@ -43,6 +32,20 @@ func main() {
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 	}))
+
+	// Movie public
+	r.GET("/movies", mc.GetMovies)
+	r.GET("/movies/:id", mc.GetMovieByID)
+	r.GET("/movies/trending", mc.GetTrendingMovies)
+	r.GET("/movies/:id/recommendations", mc.GetMovieRecommendations)
+
+	// Genre public
+	r.GET("/genres", gc.ListGenres)
+	r.GET("/genres/:id", gc.GetGenre)
+
+	// Actor public
+	r.GET("/actors", ac.ListActors)
+	r.GET("/actors/:id", ac.GetActor)
 
 	// Protected endpoints
 	protected := r.Group("/")
