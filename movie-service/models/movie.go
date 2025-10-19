@@ -11,7 +11,7 @@ type Movie struct {
 	ReleaseYear    int       `json:"release_year"`
 	Rating         float32   `json:"rating"`
 	Views          int64     `json:"views"`
-	IsPremium      bool      `gorm:"default:false" json:"is_premium"`
+	IsPremium      bool      `gorm:"default:true" json:"is_premium"`
 
 
 	Genres []Genre `gorm:"many2many:movie_genres" json:"genres"`

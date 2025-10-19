@@ -219,6 +219,8 @@ func (mc *MovieController) GetTrendingMovies(c *gin.Context) {
 }
 
 // GetMovieByID - GET /movies/:id (public)
+// movie-service/controllers/movie_controller.go
+
 func (mc *MovieController) GetMovieByID(c *gin.Context) {
 	idParam := c.Param("id")
 	id64, err := strconv.ParseUint(idParam, 10, 64)
@@ -238,29 +240,21 @@ func (mc *MovieController) GetMovieByID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"id":               movie.ID,
-		"title":            movie.Title,
-		"poster_base64":    movie.PosterBase64,
-		"duration_minutes": movie.DurationMinutes,
-		"synopsis":         movie.Synopsis,
-		"release_year":     movie.ReleaseYear,
-		"rating":           movie.Rating,
-		"views":            movie.Views,
-		"genres":           genreIDs(movie.Genres),
-		"actors":           actorIDs(movie.Actors),
-	})
-	// inside GetMovieByID(...) after loading movie
+	// =================================================================
+	// PINDAHKAN LOGIKA PENGECEKAN PREMIUM KE SINI (SEBELUM MENGIRIM JSON)
+	// =================================================================
 	if movie.IsPremium {
+		// Middleware seharusnya sudah menempatkan user_id jika token valid
 		_, exists := c.Get("user_id")
 		if !exists {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":   "subscription_required",
 				"message": "This is premium content. Please subscribe.",
 			})
-			return
+			return // <-- PENTING: hentikan eksekusi di sini
 		}
 
+		// Lanjutkan dengan validasi ke user-service
 		userServiceURL := os.Getenv("USER_SERVICE_URL")
 		req, _ := http.NewRequest("GET", userServiceURL+"/profile", nil)
 
@@ -270,7 +264,7 @@ func (mc *MovieController) GetMovieByID(c *gin.Context) {
 				"error":   "subscription_required",
 				"message": "Please login & subscribe to access premium content.",
 			})
-			return
+			return // <-- Hentikan eksekusi
 		}
 
 		req.Header.Set("Authorization", auth)
@@ -281,27 +275,29 @@ func (mc *MovieController) GetMovieByID(c *gin.Context) {
 				"error":   "subscription_required",
 				"message": "Cannot verify subscription",
 			})
-			return
+			return // <-- Hentikan eksekusi
 		}
 
 		var body map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&body)
 
+		// Cek tipe langganan
 		if body["subscription_type"] == nil || body["subscription_type"] == "none" {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":   "subscription_required",
 				"message": "Please subscribe to access premium content.",
 			})
-			return
+			return // <-- Hentikan eksekusi
 		}
 
+		// Cek tanggal kedaluwarsa
 		expiresStr, ok := body["subscription_expired_at"].(string)
 		if !ok || expiresStr == "" {
 			c.JSON(http.StatusForbidden, gin.H{
 				"error":   "subscription_required",
 				"message": "Please subscribe to access premium content.",
 			})
-			return
+			return // <-- Hentikan eksekusi
 		}
 
 		expiryTime, _ := time.Parse(time.RFC3339, expiresStr)
@@ -310,9 +306,24 @@ func (mc *MovieController) GetMovieByID(c *gin.Context) {
 				"error":   "subscription_expired",
 				"message": "Subscription expired, please renew.",
 			})
-			return
+			return // <-- Hentikan eksekusi
 		}
 	}
+
+	// Jika semua pengecekan premium lolos (atau jika film tidak premium),
+	// baru kirimkan detail filmnya.
+	c.JSON(http.StatusOK, gin.H{
+		"id":               movie.ID,
+		"title":            movie.Title,
+		"poster_base_64":   movie.PosterBase64,
+		"duration_minutes": movie.DurationMinutes,
+		"synopsis":         movie.Synopsis,
+		"release_year":     movie.ReleaseYear,
+		"rating":           movie.Rating,
+		"views":            movie.Views,
+		"genres":           genreIDs(movie.Genres),
+		"actors":           actorIDs(movie.Actors),
+	})
 }
 
 func (mc *MovieController) GetMovieRecommendations(c *gin.Context) {
